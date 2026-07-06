@@ -48,5 +48,30 @@ app.post('/upload', upload.single('file'), (req, res) => {
   }
 });
 
+// 4. Route to fetch all uploaded files from Cloudinary
+app.get('/files', async (req, res) => {
+  try {
+    // Search Cloudinary for resources in your specific folder
+    const { resources } = await cloudinary.search
+      .expression('folder:cloud_file_manager') 
+      .sort_by('created_at', 'desc')
+      .max_results(30)
+      .execute();
+
+    // Map the Cloudinary response to match what your frontend expects
+    const files = resources.map(file => ({
+      name: file.filename + '.' + file.format,
+      url: file.secure_url,
+      bytes: file.bytes,
+      created_at: file.created_at
+    }));
+
+    res.json(files);
+  } catch (error) {
+    console.error("Error fetching files from Cloudinary:", error);
+    res.status(500).json({ error: "Failed to fetch files" });
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
