@@ -1,72 +1,52 @@
 const express = require('express');
-const fs = require('fs').promises;
-const path = require('path');
 const multer = require('multer');
+const cors = require('cors');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+require('dotenv').config();
 
 const app = express();
+
+// Enable CORS so your Vercel frontend can talk to this Render backend
+app.use(cors());
 app.use(express.json());
 
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// 1. Configure Cloudinary with Environment Variables
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(console.error);
+// 2. Setup Cloudinary Storage Engine for Multer
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'cloud_file_manager', // Folder name inside Cloudinary
+    resource_type: 'auto',        // Supports images, PDFs, videos, etc.
+  },
+});
 
-// Setup multer for file uploads
-const upload = multer({ dest: UPLOAD_DIR });
+const upload = multer({ storage: storage });
 
-// GET /api/files?path=/some/path
-app.get('/api/files', async (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  
+// Health check route
+app.get('/', (req, res) => {
+  res.send('Backend Server is Running and Cloudinary is Configured!');
+});
+
+// 3. Your Cloud Upload Route
+app.post('/upload', upload.single('file'), (req, res) => {
   try {
-    const targetPath = req.query.path || '';
-    const fullPath = path.join(UPLOAD_DIR, targetPath);
-
-    if (!fullPath.startsWith(UPLOAD_DIR)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const entries = await fs.readdir(fullPath, { withFileTypes: true });
-    
-    const files = await Promise.all(
-      entries.map(async (entry) => {
-        const entryPath = path.join(fullPath, entry.name);
-        const stat = await fs.stat(entryPath);
-        
-        return {
-          name: entry.name,
-          type: entry.isDirectory() ? 'folder' : 'file',
-          size: stat.size,
-          modified: stat.mtime.toISOString(),
-        };
-      })
-    );
-
-    res.json({ files, currentPath: targetPath });
+    // req.file.path is the permanent cloud URL from Cloudinary
+    res.status(200).json({
+      message: 'File uploaded successfully to the cloud!',
+      fileUrl: req.file.path, 
+      fileName: req.file.originalname
+    });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// POST /api/upload
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-
-  res.json({
-    message: 'File uploaded successfully',
-    file: {
-      name: req.file.originalname,
-      size: req.file.size,
-      path: req.file.path,
-    },
-  });
-});
-
-const PORT = 8000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
