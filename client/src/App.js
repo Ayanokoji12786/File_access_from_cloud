@@ -10,22 +10,22 @@ function App() {
   const fetchFiles = async (path = '/') => {
     setLoading(true);
     try {
-      const response = await fetch(`https://file-access-from-cloud.onrender.com/files?path=${path}`);
+      // Adjusted to use your backend route
+      const response = await fetch('https://file-access-from-cloud.onrender.com/files');
       const data = await response.json();
+      // Fix: Handle the raw array returned by your backend
       setFiles(Array.isArray(data) ? data : []);
-      setCurrentPath(data.currentPath || '/');
+      setCurrentPath('/');
     } catch (error) {
       console.error('Error fetching files:', error);
     }
     setLoading(false);
   };
 
-  // Load files on mount
   useEffect(() => {
     fetchFiles();
   }, []);
 
-  // Handle file upload
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -39,29 +39,21 @@ function App() {
         method: 'POST',
         body: formData,
       });
-      const data = await response.json();
-      console.log('Upload successful:', data);
-      fetchFiles(currentPath); // Refresh file list
+      await response.json();
+      fetchFiles(); // Refresh list after upload
     } catch (error) {
       console.error('Error uploading file:', error);
     }
     setLoading(false);
   };
 
-  // Get icon based on file type
-  const getIcon = (file) => {
-    if (file.type === 'folder') return '📁';
-    const ext = file.name.split('.').pop().toLowerCase();
+  const getIcon = (fileName) => {
+    const ext = fileName.split('.').pop().toLowerCase();
     const icons = {
       pdf: '📄',
-      doc: '📝',
-      docx: '📝',
-      txt: '📄',
       jpg: '🖼️',
       png: '🖼️',
-      mp4: '🎬',
-      mp3: '🎵',
-      zip: '📦',
+      webp: '🖼️',
     };
     return icons[ext] || '📄';
   };
@@ -76,12 +68,7 @@ function App() {
       <div className="controls">
         <label className="upload-btn">
           ⬆️ Upload File
-          <input
-            type="file"
-            onChange={handleUpload}
-            disabled={loading}
-            style={{ display: 'none' }}
-          />
+          <input type="file" onChange={handleUpload} disabled={loading} style={{ display: 'none' }} />
         </label>
       </div>
 
@@ -95,20 +82,20 @@ function App() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Type</th>
                 <th>Size</th>
-                <th>Modified</th>
+                <th>Uploaded</th>
               </tr>
             </thead>
             <tbody>
               {files.map((file, idx) => (
                 <tr key={idx}>
                   <td className="name">
-                    <span>{getIcon(file)}</span> {file.name}
+                    <a href={file.url} target="_blank" rel="noreferrer">
+                      {getIcon(file.name)} {file.name}
+                    </a>
                   </td>
-                  <td>{file.type}</td>
-                  <td>{(file.size / 1024).toFixed(2)} KB</td>
-                  <td>{new Date(file.modified).toLocaleString()}</td>
+                  <td>{(file.bytes / 1024).toFixed(2)} KB</td>
+                  <td>{new Date(file.created_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
