@@ -12,7 +12,7 @@ function App() {
     try {
       const response = await fetch(`https://file-access-from-cloud.onrender.com/files?path=${path}`);
       const data = await response.json();
-      setFiles(data.files || []);
+      setFiles(Array.isArray(data) ? data : []);
       setCurrentPath(data.currentPath || '/');
     } catch (error) {
       console.error('Error fetching files:', error);
