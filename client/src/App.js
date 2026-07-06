@@ -10,7 +10,7 @@ function App() {
   const fetchFiles = async (path = '/') => {
     setLoading(true);
     try {
-      const response = await fetch(`https://file-access-from-cloud.onrender.com/api/files?path=${path}`);
+      const response = await fetch(`https://file-access-from-cloud.onrender.com/files?path=${path}`);
       const data = await response.json();
       setFiles(data.files || []);
       setCurrentPath(data.currentPath || '/');
@@ -35,7 +35,7 @@ function App() {
 
     setLoading(true);
     try {
-      const response = await fetch('https://file-access-from-cloud.onrender.com/api/upload', {
+      const response = await fetch('https://file-access-from-cloud.onrender.com/upload', {
         method: 'POST',
         body: formData,
       });
