@@ -37,7 +37,6 @@ app.get('/', (req, res) => {
 // 3. Your Cloud Upload Route
 app.post('/upload', upload.single('file'), (req, res) => {
   try {
-    // req.file.path is the permanent cloud URL from Cloudinary
     res.status(200).json({
       message: 'File uploaded successfully to the cloud!',
       fileUrl: req.file.path, 
@@ -48,27 +47,30 @@ app.post('/upload', upload.single('file'), (req, res) => {
   }
 });
 
-// 4. Route to fetch all uploaded files from Cloudinary
+// 4. Robust route using Admin API to fetch all uploaded files
 app.get('/files', async (req, res) => {
   try {
-    // Search Cloudinary for resources in your specific folder
-    const { resources } = await cloudinary.search
-      .expression('folder:cloud_file_manager') 
-      .sort_by('created_at', 'desc')
-      .max_results(30)
-      .execute();
+    // Using api.resources instead of search to bypass account restrictions
+    const result = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'cloud_file_manager/', // Filter files in this folder
+      max_results: 30
+    });
 
-    // Map the Cloudinary response to match what your frontend expects
-    const files = resources.map(file => ({
-      name: file.filename + '.' + file.format,
-      url: file.secure_url,
-      bytes: file.bytes,
-      created_at: file.created_at
-    }));
+    // Map Cloudinary resources to match your frontend expectations
+    const files = result.resources.map(file => {
+      const cleanName = file.public_id.replace('cloud_file_manager/', '');
+      return {
+        name: cleanName + '.' + file.format,
+        url: file.secure_url,
+        bytes: file.bytes,
+        created_at: file.created_at
+      };
+    });
 
     res.json(files);
   } catch (error) {
-    console.error("Error fetching files from Cloudinary:", error);
+    console.error("Cloudinary listing error:", error);
     res.status(500).json({ error: "Failed to fetch files" });
   }
 });
