@@ -375,9 +375,9 @@ app.get('/debug/files', async (req, res) => {
 });
 
 // NEW: Check file headers and content type
-app.get('/debug/check/:public_id', async (req, res) => {
+app.get('/debug/check/*', async (req, res) => {
   try {
-    const publicId = req.params.public_id;
+    const publicId = req.params[0];
 
     if (!publicId) {
       return res.status(400).json({ error: 'public_id parameter is required' });
@@ -453,9 +453,9 @@ app.get('/debug/check/:public_id', async (req, res) => {
 });
 
 // NEW: Proxy endpoint to actually retrieve the file
-app.get('/proxy/:public_id', async (req, res) => {
+app.get('/proxy/*', async (req, res) => {
   try {
-    const publicId = req.params.public_id;
+    const publicId = req.params[0];
 
     // Get file resource info
     const resource = await cloudinary.api.resource(publicId);
@@ -496,9 +496,9 @@ app.get('/proxy/:public_id', async (req, res) => {
   }
 });
 
-app.get('/download/:public_id', async (req, res) => {
+app.get('/download/*', async (req, res) => {
   try {
-    const publicId = req.params.public_id;
+    const publicId = req.params[0];
 
     // Generate signed URL with attachment disposition to force download
     const url = cloudinary.url(publicId, {
@@ -522,9 +522,10 @@ app.get('/download/:public_id', async (req, res) => {
 });
 
 // Alternative: Direct file streaming (more secure than redirect)
-app.get('/file/:public_id', async (req, res) => {
+app.get('/file/*', async (req, res) => {
   try {
-    const publicId = req.params.public_id;
+    // Extract everything after /file/ as the public_id (handles slashes)
+    const publicId = req.params[0];
     const fileName = publicId.split('/').pop();
 
     // Generate signed URL with authentication
