@@ -375,9 +375,9 @@ app.get('/debug/files', async (req, res) => {
 });
 
 // NEW: Check file headers and content type
-app.get('/debug/check/*', async (req, res) => {
+app.get('/debug/check/*splat', async (req, res) => {
   try {
-    const publicId = req.params[0];
+    const publicId = req.params.splat.join('/');
 
     if (!publicId) {
       return res.status(400).json({ error: 'public_id parameter is required' });
@@ -397,7 +397,7 @@ app.get('/debug/check/*', async (req, res) => {
       resource_type: resource.resource_type || 'raw',
       secure: true,
       sign_url: true,
-      type: 'authenticated'
+      type: resource.type || 'upload'
     });
 
     // Function to check URL headers
@@ -453,9 +453,9 @@ app.get('/debug/check/*', async (req, res) => {
 });
 
 // NEW: Proxy endpoint to actually retrieve the file
-app.get('/proxy/*', async (req, res) => {
+app.get('/proxy/*splat', async (req, res) => {
   try {
-    const publicId = req.params[0];
+    const publicId = req.params.splat.join('/');
 
     // Get file resource info
     const resource = await cloudinary.api.resource(publicId);
@@ -465,7 +465,7 @@ app.get('/proxy/*', async (req, res) => {
       resource_type: resource.resource_type,
       secure: true,
       sign_url: true,
-      type: 'authenticated'
+      type: resource.type || 'upload'
     });
 
     const https = require('https');
@@ -496,16 +496,19 @@ app.get('/proxy/*', async (req, res) => {
   }
 });
 
-app.get('/download/*', async (req, res) => {
+app.get('/download/*splat', async (req, res) => {
   try {
-    const publicId = req.params[0];
+    const publicId = req.params.splat.join('/');
+
+    // Get file resource info to determine actual resource_type/type
+    const resource = await cloudinary.api.resource(publicId);
 
     // Generate signed URL with attachment disposition to force download
     const url = cloudinary.url(publicId, {
-      resource_type: 'raw',
+      resource_type: resource.resource_type || 'raw',
       secure: true,
       sign_url: true,
-      type: 'authenticated',
+      type: resource.type || 'upload',
       attachment: true // Force download instead of preview
     });
 
@@ -522,18 +525,21 @@ app.get('/download/*', async (req, res) => {
 });
 
 // Alternative: Direct file streaming (more secure than redirect)
-app.get('/file/*', async (req, res) => {
+app.get('/file/*splat', async (req, res) => {
   try {
     // Extract everything after /file/ as the public_id (handles slashes)
-    const publicId = req.params[0];
+    const publicId = req.params.splat.join('/');
     const fileName = publicId.split('/').pop();
 
-    // Generate signed URL with authentication
+    // Get file resource info to determine actual resource_type/type
+    const resource = await cloudinary.api.resource(publicId);
+
+    // Generate signed URL
     const url = cloudinary.url(publicId, {
-      resource_type: 'raw',
+      resource_type: resource.resource_type || 'raw',
       secure: true,
       sign_url: true,
-      type: 'authenticated'
+      type: resource.type || 'upload'
     });
 
     // Fetch the file from Cloudinary
