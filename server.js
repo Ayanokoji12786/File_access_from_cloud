@@ -62,6 +62,7 @@ app.get('/files', async (req, res) => {
 
       return {
         name: file.public_id.split('/').pop() + (file.format ? '.' + file.format : ''),
+        public_id: file.public_id,
         url: url,
         bytes: file.bytes,
         created_at: file.created_at
@@ -74,13 +75,64 @@ app.get('/files', async (req, res) => {
   }
 });
 
-app.get('/download/:public_id', (req, res) => {
-  const publicId = req.params.public_id;
-  // Generate the cloudinary URL with the transformation if needed
-  const url = cloudinary.url(publicId, { resource_type: 'raw', secure: true });
+app.get('/download/:public_id', async (req, res) => {
+  try {
+    const publicId = req.params.public_id;
 
-  // Redirect to the URL or pipe the stream
-  res.redirect(url);
+    // Generate signed URL with attachment disposition to force download
+    const url = cloudinary.url(publicId, {
+      resource_type: 'raw',
+      secure: true,
+      sign_url: true,
+      type: 'authenticated',
+      attachment: true // Force download instead of preview
+    });
+
+    // Set proper headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${publicId.split('/').pop()}"`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // Redirect to the signed URL
+    res.redirect(url);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+// Alternative: Direct file streaming (more secure than redirect)
+app.get('/file/:public_id', async (req, res) => {
+  try {
+    const publicId = req.params.public_id;
+    const fileName = publicId.split('/').pop();
+
+    // Generate signed URL with authentication
+    const url = cloudinary.url(publicId, {
+      resource_type: 'raw',
+      secure: true,
+      sign_url: true,
+      type: 'authenticated'
+    });
+
+    // Fetch the file from Cloudinary
+    const https = require('https');
+    https.get(url, (cloudinaryRes) => {
+      // Set proper headers for download
+      res.setHeader('Content-Type', cloudinaryRes.headers['content-type'] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Length', cloudinaryRes.headers['content-length']);
+
+      // Pipe the response
+      cloudinaryRes.pipe(res);
+    }).on('error', (error) => {
+      console.error('File fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch file' });
+    });
+  } catch (error) {
+    console.error('File route error:', error);
+    res.status(500).json({ error: 'Failed to process file request' });
+  }
 });
 
 const PORT = process.env.PORT || 8000;

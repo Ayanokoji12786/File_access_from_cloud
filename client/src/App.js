@@ -39,12 +39,32 @@ function App() {
         method: 'POST',
         body: formData,
       });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
       await response.json();
       fetchFiles(); // Refresh list after upload
+      alert('File uploaded successfully!');
     } catch (error) {
       console.error('Error uploading file:', error);
+      alert('Error uploading file: ' + error.message);
     }
     setLoading(false);
+  };
+
+  const handleDownload = (publicId, fileName) => {
+    // Use the /file route which streams the file directly
+    const downloadUrl = `https://file-access-from-cloud.onrender.com/file/${publicId}`;
+
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const getIcon = (fileName) => {
@@ -90,9 +110,12 @@ function App() {
               {files.map((file, idx) => (
                 <tr key={idx}>
                   <td className="name">
-                    <a href={`https://file-access-from-cloud.onrender.com/download/${file.public_id}`} download>
+                    <button
+                      onClick={() => handleDownload(file.public_id, file.name)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0066cc', textDecoration: 'underline' }}
+                    >
                       {getIcon(file.name)} {file.name}
-                    </a>
+                    </button>
                   </td>
                   <td>{(file.bytes / 1024).toFixed(2)} KB</td>
                   <td>{new Date(file.created_at).toLocaleString()}</td>
