@@ -300,31 +300,30 @@ app.get('/debug/files', async (req, res) => {
       cloudinary.api.resources({ type: 'upload', prefix: 'cloud_file_manager/', resource_type: 'image', max_results: 100 })
     ]);
 
-    const allFiles = [...rawRes.resources, ...imgRes.resources];
+    const allFiles = [...(rawRes.resources || []), ...(imgRes.resources || [])];
+
+    if (!allFiles || allFiles.length === 0) {
+      return res.json([]);
+    }
 
     // Return detailed metadata for debugging
-    const filesMetadata = allFiles.map(file => ({
-      name: file.public_id,
-      format: file.format,
-      resource_type: file.resource_type,
-      type: file.type,
-      bytes: file.bytes,
-      access_mode: file.access_mode, // THIS IS KEY - check if private/public
-      created_at: file.created_at,
-      secure_url: file.secure_url,
-      url: file.url,
-      // Try generating different URL formats
-      urls: {
-        direct: file.secure_url,
-        with_attachment: file.secure_url.replace('/raw/upload/', '/raw/upload/fl_attachment/'),
-        with_signature: cloudinary.url(file.public_id, {
-          resource_type: file.resource_type,
-          secure: true,
-          sign_url: true,
-          type: 'authenticated'
-        })
-      }
-    }));
+    const filesMetadata = allFiles.map(file => {
+      const fileName = file.public_id ? file.public_id.split('/').pop() : 'unknown';
+      const format = file.format ? '.' + file.format : '';
+
+      return {
+        name: fileName + format,
+        public_id: file.public_id || 'unknown',
+        format: file.format || 'unknown',
+        resource_type: file.resource_type || 'unknown',
+        type: file.type || 'upload',
+        bytes: file.bytes || 0,
+        access_mode: file.access_mode || 'unknown',
+        created_at: file.created_at || new Date(),
+        secure_url: file.secure_url || '',
+        url: file.url || ''
+      };
+    });
 
     res.json(filesMetadata);
   } catch (error) {
@@ -338,13 +337,22 @@ app.get('/debug/check/:public_id', async (req, res) => {
   try {
     const publicId = req.params.public_id;
 
+    if (!publicId) {
+      return res.status(400).json({ error: 'public_id parameter is required' });
+    }
+
     // Fetch metadata
-    const resource = await cloudinary.api.resource(publicId);
+    let resource;
+    try {
+      resource = await cloudinary.api.resource(publicId);
+    } catch (error) {
+      return res.status(404).json({ error: 'File not found in Cloudinary: ' + publicId });
+    }
 
     // Generate different URLs
-    const directUrl = resource.secure_url;
+    const directUrl = resource.secure_url || resource.url;
     const signedUrl = cloudinary.url(publicId, {
-      resource_type: resource.resource_type,
+      resource_type: resource.resource_type || 'raw',
       secure: true,
       sign_url: true,
       type: 'authenticated'
@@ -353,20 +361,22 @@ app.get('/debug/check/:public_id', async (req, res) => {
     // Fetch the file to check headers
     const https = require('https');
     const http = require('http');
-    const { URL } = require('url');
 
     const checkUrl = (url) => {
       return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
 
-        protocol.head(url, { timeout: 5000 }, (res) => {
+        const req = protocol.head(url, { timeout: 5000 }, (res) => {
           resolve({
             statusCode: res.statusCode,
-            contentType: res.headers['content-type'],
-            contentLength: res.headers['content-length'],
-            headers: res.headers
+            contentType: res.headers['content-type'] || 'unknown',
+            contentLength: res.headers['content-length'] || 'unknown',
           });
-        }).on('error', reject);
+        });
+
+        req.on('error', (error) => {
+          resolve({ error: error.message });
+        });
       });
     };
 
@@ -379,11 +389,11 @@ app.get('/debug/check/:public_id', async (req, res) => {
     res.json({
       fileInfo: {
         public_id: publicId,
-        format: resource.format,
-        resource_type: resource.resource_type,
-        bytes: resource.bytes,
-        access_mode: resource.access_mode,
-        created_at: resource.created_at
+        format: resource.format || 'unknown',
+        resource_type: resource.resource_type || 'raw',
+        bytes: resource.bytes || 0,
+        access_mode: resource.access_mode || 'unknown',
+        created_at: resource.created_at || new Date()
       },
       urls: {
         direct: directUrl,
