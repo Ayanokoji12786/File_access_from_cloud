@@ -400,32 +400,32 @@ app.get('/debug/check/:public_id', async (req, res) => {
       type: 'authenticated'
     });
 
-    // Fetch the file to check headers
-    const https = require('https');
-    const http = require('http');
-
+    // Function to check URL headers
     const checkUrl = (url) => {
-      return new Promise((resolve, reject) => {
-        const protocol = url.startsWith('https') ? https : http;
+      return new Promise((resolve) => {
+        const isHttps = url.startsWith('https');
+        const lib = isHttps ? require('https') : require('http');
 
-        const req = protocol.head(url, { timeout: 5000 }, (res) => {
+        const request = lib.request(url, { method: 'HEAD' }, (res) => {
           resolve({
             statusCode: res.statusCode,
             contentType: res.headers['content-type'] || 'unknown',
-            contentLength: res.headers['content-length'] || 'unknown',
+            contentLength: res.headers['content-length'] || 'unknown'
           });
         });
 
-        req.on('error', (error) => {
+        request.on('error', (error) => {
           resolve({ error: error.message });
         });
+
+        request.end();
       });
     };
 
     // Test both URLs
     const [directCheck, signedCheck] = await Promise.all([
-      checkUrl(directUrl).catch(e => ({ error: e.message })),
-      checkUrl(signedUrl).catch(e => ({ error: e.message }))
+      checkUrl(directUrl),
+      checkUrl(signedUrl)
     ]);
 
     res.json({
