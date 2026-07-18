@@ -90,7 +90,7 @@ function App() {
               {files.map((file, idx) => (
                 <tr key={idx}>
                   <td className="name">
-                    <a href={file.url} download={file.name}>
+                    <a href={`https://file-access-from-cloud.onrender.com/download/${file.public_id}`} download>
                       {getIcon(file.name)} {file.name}
                     </a>
                   </td>

@@ -34,7 +34,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
   try {
     res.status(200).json({
       message: 'File uploaded successfully!',
-      fileUrl: req.file.path, 
+      fileUrl: req.file.path,
       fileName: req.file.originalname
     });
   } catch (error) {
@@ -50,16 +50,16 @@ app.get('/files', async (req, res) => {
       cloudinary.api.resources({ type: 'upload', prefix: 'cloud_file_manager/', resource_type: 'image' })
     ]);
     const allFiles = [...rawRes.resources, ...imgRes.resources];
-    
+
     // 2. Map files and ensure the URL forces a download/open behavior
     const files = allFiles.map(file => {
       let url = file.secure_url;
-      
+
       // If it's a raw file (like many PDFs), add the attachment flag to force accessibility
       if (file.resource_type === 'raw') {
         url = url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
       }
-      
+
       return {
         name: file.public_id.split('/').pop() + (file.format ? '.' + file.format : ''),
         url: url,
@@ -67,12 +67,20 @@ app.get('/files', async (req, res) => {
         created_at: file.created_at
       };
     });
-    
     res.json(files);
   } catch (error) {
     console.error("Cloudinary listing error:", error);
     res.status(500).json({ error: "Failed to fetch files" });
   }
+});
+
+app.get('/download/:public_id', (req, res) => {
+  const publicId = req.params.public_id;
+  // Generate the cloudinary URL with the transformation if needed
+  const url = cloudinary.url(publicId, { resource_type: 'raw', secure: true });
+
+  // Redirect to the URL or pipe the stream
+  res.redirect(url);
 });
 
 const PORT = process.env.PORT || 8000;
