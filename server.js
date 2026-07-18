@@ -134,15 +134,23 @@ app.get('/diagnostic', (req, res) => {
         
         .success {
             color: #28a745;
+            font-weight: bold;
         }
         
         .error {
             color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: #ff9800;
+            font-weight: bold;
         }
         
         #fileButtons {
             display: flex;
             flex-wrap: wrap;
+            gap: 8px;
         }
     </style>
 </head>
@@ -150,13 +158,13 @@ app.get('/diagnostic', (req, res) => {
     <div class="container">
         <h1>🔍 Cloud File Manager - PDF Diagnostics</h1>
         <div class="info">
-            This tool helps diagnose why some PDFs fail to load. Click "Fetch Files" to start.
+            This tool helps diagnose why some PDFs fail to load. It tests your files and shows status codes.
         </div>
         
         <div class="section">
             <div class="section-title">Step 1: Load File List</div>
             <button onclick="loadFiles()">📋 Fetch All Files from Cloudinary</button>
-            <div id="fileListOutput" class="output">Click the button to start...</div>
+            <div id="fileListOutput" class="output">Click the button to load your files...</div>
         </div>
         
         <div class="section">
@@ -178,68 +186,102 @@ app.get('/diagnostic', (req, res) => {
             output.textContent = '⏳ Loading files...';
             
             try {
-                const response = await fetch(BACKEND_URL + '/debug/files');
+                const response = await fetch(BACKEND_URL + '/files');
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                
                 const data = await response.json();
                 
-                output.innerHTML = '<span class="success">✅ Loaded ' + data.length + ' files</span>';
+                if (!Array.isArray(data)) {
+                    throw new Error('Expected array, got: ' + typeof data);
+                }
+                
+                output.innerHTML = '<span class="success">✅ Loaded ' + data.length + ' files</span>\\n\\n';
                 
                 const buttonsContainer = document.getElementById('fileButtons');
                 buttonsContainer.innerHTML = '';
                 
-                data.forEach((file) => {
+                if (data.length === 0) {
+                    output.innerHTML += '<span class="warning">⚠️ No files found in Cloudinary</span>';
+                    return;
+                }
+                
+                data.forEach((file, idx) => {
+                    if (!file) {
+                        console.warn('File at index ' + idx + ' is null or undefined');
+                        return;
+                    }
+                    
                     const btn = document.createElement('button');
-                    btn.textContent = '📄 ' + file.name;
+                    btn.textContent = '📄 ' + (file.name || 'Unknown');
                     btn.className = 'secondary';
                     btn.onclick = () => testFile(file);
                     buttonsContainer.appendChild(btn);
+                    
+                    output.innerHTML += (idx + 1) + '. ' + (file.name || 'Unknown') + ' (' + file.public_id + ')\\n';
                 });
                 
             } catch (error) {
                 output.innerHTML = '<span class="error">❌ Error: ' + error.message + '</span>';
+                console.error('Load error:', error);
             }
         }
 
         async function testFile(file) {
             const output = document.getElementById('testOutput');
-            output.textContent = '⏳ Testing ' + file.name + '...';
+            output.textContent = '⏳ Testing ' + file.name + '...\\n';
+            
+            if (!file.public_id) {
+                output.innerHTML = '<span class="error">❌ Error: No public_id for this file</span>';
+                return;
+            }
             
             try {
-                const response = await fetch(BACKEND_URL + '/debug/check/' + file.public_id);
+                const response = await fetch(BACKEND_URL + '/debug/check/' + encodeURIComponent(file.public_id));
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                
                 const data = await response.json();
                 
-                let html = '<span class="success">✅ File Info:</span>\\n';
-                html += 'Name: ' + data.fileInfo.public_id + '\\n';
+                let html = '<span class="success">✅ File: ' + file.name + '</span>\\n';
+                html += 'Public ID: ' + data.fileInfo.public_id + '\\n';
                 html += 'Format: ' + data.fileInfo.format + '\\n';
-                html += 'Type: ' + data.fileInfo.resource_type + '\\n';
+                html += 'Resource Type: ' + data.fileInfo.resource_type + '\\n';
                 html += 'Size: ' + (data.fileInfo.bytes / 1024).toFixed(2) + ' KB\\n';
-                html += 'Access: ' + data.fileInfo.access_mode + '\\n\\n';
+                html += 'Access Mode: ' + data.fileInfo.access_mode + '\\n\\n';
                 
-                html += '<span class="success">✅ Status Codes:</span>\\n';
-                if (data.headersCheck.direct.statusCode === 200) {
-                    html += 'Direct URL: <span class="success">200 OK</span>\\n';
+                html += '<span class="success">Status Code Check:</span>\\n';
+                if (data.headersCheck.direct.error) {
+                    html += 'Direct URL: <span class="error">ERROR - ' + data.headersCheck.direct.error + '</span>\\n';
                 } else {
-                    html += 'Direct URL: <span class="error">' + data.headersCheck.direct.statusCode + '</span>\\n';
+                    const directStatus = data.headersCheck.direct.statusCode;
+                    const directColor = directStatus === 200 ? 'success' : 'error';
+                    html += 'Direct URL: <span class="' + directColor + '">' + directStatus + '</span>\\n';
                 }
-                if (data.headersCheck.signed.statusCode === 200) {
-                    html += 'Signed URL: <span class="success">200 OK</span>\\n\\n';
+                
+                if (data.headersCheck.signed.error) {
+                    html += 'Signed URL: <span class="error">ERROR - ' + data.headersCheck.signed.error + '</span>\\n\\n';
                 } else {
-                    html += 'Signed URL: <span class="error">' + data.headersCheck.signed.statusCode + '</span>\\n\\n';
+                    const signedStatus = data.headersCheck.signed.statusCode;
+                    const signedColor = signedStatus === 200 ? 'success' : 'error';
+                    html += 'Signed URL: <span class="' + signedColor + '">' + signedStatus + '</span>\\n\\n';
                 }
                 
                 html += '<span class="success">Try downloading via proxy:</span>\\n';
-                html += '<a href="' + BACKEND_URL + '/proxy/' + data.fileInfo.public_id + '" target="_blank">Click to Download</a>\\n\\n';
-                
-                html += '<span class="success">Full metadata:</span>\\n' + JSON.stringify(data, null, 2);
+                html += '<a href="' + BACKEND_URL + '/proxy/' + encodeURIComponent(file.public_id) + '" target="_blank" style="color: #0066cc; text-decoration: underline;">📥 Click here to download</a>';
                 
                 output.innerHTML = html;
                 
             } catch (error) {
                 output.innerHTML = '<span class="error">❌ Error: ' + error.message + '</span>';
+                console.error('Test error:', error);
             }
         }
 
         window.onload = () => {
-            document.getElementById('fileListOutput').textContent = 'Ready! Click "Fetch All Files" to start.';
+            document.getElementById('fileListOutput').textContent = '👉 Click "Fetch All Files" to begin...';
         };
     </script>
 </body>
