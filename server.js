@@ -31,6 +31,20 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
+// cloudinary.api.resource() defaults to resource_type 'image' when not given,
+// so a lookup for a 'raw' resource (e.g. a PDF) 404s unless we tell it where
+// to look. Try each known type until one matches.
+async function resolveResource(publicId) {
+  for (const resource_type of ['image', 'raw', 'video']) {
+    try {
+      return await cloudinary.api.resource(publicId, { resource_type });
+    } catch (error) {
+      // not found under this resource_type — try the next one
+    }
+  }
+  throw new Error('File not found in Cloudinary: ' + publicId);
+}
+
 app.get('/', (req, res) => {
   res.send('Backend Server is Running!');
 });
@@ -342,7 +356,7 @@ app.delete('/files/*splat', async (req, res) => {
   try {
     const publicId = req.params.splat.join('/');
 
-    const resource = await cloudinary.api.resource(publicId);
+    const resource = await resolveResource(publicId);
     await cloudinary.uploader.destroy(publicId, { resource_type: resource.resource_type });
 
     res.json({ message: 'File deleted successfully' });
@@ -404,7 +418,7 @@ app.get('/debug/check/*splat', async (req, res) => {
     // Fetch metadata
     let resource;
     try {
-      resource = await cloudinary.api.resource(publicId);
+      resource = await resolveResource(publicId);
     } catch (error) {
       return res.status(404).json({ error: 'File not found in Cloudinary: ' + publicId });
     }
@@ -476,7 +490,7 @@ app.get('/proxy/*splat', async (req, res) => {
     const publicId = req.params.splat.join('/');
 
     // Get file resource info
-    const resource = await cloudinary.api.resource(publicId);
+    const resource = await resolveResource(publicId);
 
     // Generate signed URL
     const url = cloudinary.url(publicId, {
@@ -519,7 +533,7 @@ app.get('/download/*splat', async (req, res) => {
     const publicId = req.params.splat.join('/');
 
     // Get file resource info to determine actual resource_type/type
-    const resource = await cloudinary.api.resource(publicId);
+    const resource = await resolveResource(publicId);
 
     // Generate signed URL with attachment disposition to force download
     const url = cloudinary.url(publicId, {
@@ -549,7 +563,7 @@ app.get('/view/*splat', async (req, res) => {
     const publicId = req.params.splat.join('/');
     const fileName = publicId.split('/').pop();
 
-    const resource = await cloudinary.api.resource(publicId);
+    const resource = await resolveResource(publicId);
 
     const url = cloudinary.url(publicId, {
       resource_type: resource.resource_type || 'raw',
@@ -586,7 +600,7 @@ app.get('/file/*splat', async (req, res) => {
     const fileName = publicId.split('/').pop();
 
     // Get file resource info to determine actual resource_type/type
-    const resource = await cloudinary.api.resource(publicId);
+    const resource = await resolveResource(publicId);
 
     // Generate signed URL
     const url = cloudinary.url(publicId, {
