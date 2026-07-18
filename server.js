@@ -19,10 +19,14 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
+  params: async (req, file) => ({
     folder: 'cloud_file_manager',
-    resource_type: 'auto', // Keep 'auto' to let Cloudinary detect types
-  },
+    // Cloudinary blocks unsigned/signed delivery of PDFs stored under
+    // resource_type 'image' (its PDF/ZIP security restriction returns
+    // 401 "deny or ACL failure"). Store non-image files as 'raw' to
+    // avoid that restriction; only actual images use 'image'.
+    resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
+  }),
 });
 
 const upload = multer({ storage: storage });
@@ -334,6 +338,20 @@ app.get('/files', async (req, res) => {
   }
 });
 
+app.delete('/files/*splat', async (req, res) => {
+  try {
+    const publicId = req.params.splat.join('/');
+
+    const resource = await cloudinary.api.resource(publicId);
+    await cloudinary.uploader.destroy(publicId, { resource_type: resource.resource_type });
+
+    res.json({ message: 'File deleted successfully' });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
 // NEW: Diagnostic route to check file metadata in Cloudinary
 app.get('/debug/files', async (req, res) => {
   try {
@@ -521,6 +539,42 @@ app.get('/download/*splat', async (req, res) => {
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+// Stream the file inline so the browser renders it (e.g. its built-in PDF viewer)
+// instead of downloading it, unlike /file which forces attachment.
+app.get('/view/*splat', async (req, res) => {
+  try {
+    const publicId = req.params.splat.join('/');
+    const fileName = publicId.split('/').pop();
+
+    const resource = await cloudinary.api.resource(publicId);
+
+    const url = cloudinary.url(publicId, {
+      resource_type: resource.resource_type || 'raw',
+      secure: true,
+      sign_url: true,
+      type: resource.type || 'upload'
+    });
+
+    const https = require('https');
+    https.get(url, (cloudinaryRes) => {
+      res.setHeader('Content-Type', cloudinaryRes.headers['content-type'] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      if (cloudinaryRes.headers['content-length']) {
+        res.setHeader('Content-Length', cloudinaryRes.headers['content-length']);
+      }
+
+      cloudinaryRes.pipe(res);
+    }).on('error', (error) => {
+      console.error('View fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch file' });
+    });
+  } catch (error) {
+    console.error('View route error:', error);
+    res.status(500).json({ error: 'Failed to process file request' });
   }
 });
 

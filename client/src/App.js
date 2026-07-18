@@ -54,6 +54,10 @@ function App() {
     setLoading(false);
   };
 
+  const handleView = (publicId) => {
+    window.open(`https://file-access-from-cloud.onrender.com/view/${publicId}`, '_blank');
+  };
+
   const handleDownload = (publicId, fileName) => {
     // Use the /file route which streams the file directly
     const downloadUrl = `https://file-access-from-cloud.onrender.com/file/${publicId}`;
@@ -65,6 +69,27 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDelete = async (publicId, fileName) => {
+    if (!window.confirm(`Delete "${fileName}"? This cannot be undone.`)) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`https://file-access-from-cloud.onrender.com/files/${publicId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Delete failed: ${response.statusText}`);
+      }
+
+      fetchFiles(); // Refresh list after delete
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('Error deleting file: ' + error.message);
+    }
+    setLoading(false);
   };
 
   const getIcon = (fileName) => {
@@ -104,6 +129,7 @@ function App() {
                 <th>Name</th>
                 <th>Size</th>
                 <th>Uploaded</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -111,7 +137,7 @@ function App() {
                 <tr key={idx}>
                   <td className="name">
                     <button
-                      onClick={() => handleDownload(file.public_id, file.name)}
+                      onClick={() => handleView(file.public_id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0066cc', textDecoration: 'underline' }}
                     >
                       {getIcon(file.name)} {file.name}
@@ -119,6 +145,21 @@ function App() {
                   </td>
                   <td>{(file.bytes / 1024).toFixed(2)} KB</td>
                   <td>{new Date(file.created_at).toLocaleString()}</td>
+                  <td>
+                    <button
+                      onClick={() => handleDownload(file.public_id, file.name)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0066cc' }}
+                    >
+                      ⬇️ Download
+                    </button>
+                    <button
+                      onClick={() => handleDelete(file.public_id, file.name)}
+                      disabled={loading}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc3545' }}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
