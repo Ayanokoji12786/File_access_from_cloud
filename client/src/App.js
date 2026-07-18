@@ -90,7 +90,7 @@ function App() {
               {files.map((file, idx) => (
                 <tr key={idx}>
                   <td className="name">
-                    <a href={file.url} target="_blank" rel="noreferrer">
+                    <a href={file.url} download={file.name}>
                       {getIcon(file.name)} {file.name}
                     </a>
                   </td>
