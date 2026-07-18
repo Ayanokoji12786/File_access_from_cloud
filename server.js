@@ -7,38 +7,33 @@ require('dotenv').config();
 
 const app = express();
 
-// Enable CORS so your Vercel frontend can talk to this Render backend
 app.use(cors());
 app.use(express.json());
 
-// 1. Configure Cloudinary with Environment Variables
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// 2. Setup Cloudinary Storage Engine for Multer
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'cloud_file_manager', // Folder name inside Cloudinary
-    resource_type: 'auto',        // Supports images, PDFs, videos, etc.
+    folder: 'cloud_file_manager',
+    resource_type: 'auto', // Keep 'auto' to let Cloudinary detect types
   },
 });
 
 const upload = multer({ storage: storage });
 
-// Health check route
 app.get('/', (req, res) => {
-  res.send('Backend Server is Running and Cloudinary is Configured!');
+  res.send('Backend Server is Running!');
 });
 
-// 3. Your Cloud Upload Route
 app.post('/upload', upload.single('file'), (req, res) => {
   try {
     res.status(200).json({
-      message: 'File uploaded successfully to the cloud!',
+      message: 'File uploaded successfully!',
       fileUrl: req.file.path, 
       fileName: req.file.originalname
     });
@@ -47,27 +42,32 @@ app.post('/upload', upload.single('file'), (req, res) => {
   }
 });
 
-// 4. Robust route using Admin API to fetch all uploaded files
 app.get('/files', async (req, res) => {
   try {
-    // Using api.resources instead of search to bypass account restrictions
-    const result = await cloudinary.api.resources({
-      type: 'upload',
-      prefix: 'cloud_file_manager/', // Filter files in this folder
-      max_results: 30
-    });
-
-    // Map Cloudinary resources to match your frontend expectations
-    const files = result.resources.map(file => {
-      const cleanName = file.public_id.replace('cloud_file_manager/', '');
+    // 1. Fetch both raw and image types to ensure coverage
+    const [rawRes, imgRes] = await Promise.all([
+      cloudinary.api.resources({ type: 'upload', prefix: 'cloud_file_manager/', resource_type: 'raw' }),
+      cloudinary.api.resources({ type: 'upload', prefix: 'cloud_file_manager/', resource_type: 'image' })
+    ]);
+    const allFiles = [...rawRes.resources, ...imgRes.resources];
+    
+    // 2. Map files and ensure the URL forces a download/open behavior
+    const files = allFiles.map(file => {
+      let url = file.secure_url;
+      
+      // If it's a raw file (like many PDFs), add the attachment flag to force accessibility
+      if (file.resource_type === 'raw') {
+        url = url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
+      }
+      
       return {
-        name: cleanName + '.' + file.format,
-        url: file.secure_url,
+        name: file.public_id.split('/').pop() + (file.format ? '.' + file.format : ''),
+        url: url,
         bytes: file.bytes,
         created_at: file.created_at
       };
     });
-
+    
     res.json(files);
   } catch (error) {
     console.error("Cloudinary listing error:", error);
