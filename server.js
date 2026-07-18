@@ -19,14 +19,22 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'cloud_file_manager',
-    // Cloudinary blocks unsigned/signed delivery of PDFs stored under
-    // resource_type 'image' (its PDF/ZIP security restriction returns
-    // 401 "deny or ACL failure"). Store non-image files as 'raw' to
-    // avoid that restriction; only actual images use 'image'.
-    resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
-  }),
+  params: async (req, file) => {
+    const isImage = file.mimetype.startsWith('image/');
+    return {
+      folder: 'cloud_file_manager',
+      // Cloudinary blocks unsigned/signed delivery of PDFs stored under
+      // resource_type 'image' (its PDF/ZIP security restriction returns
+      // 401 "deny or ACL failure"). Store non-image files as 'raw' to
+      // avoid that restriction; only actual images use 'image'.
+      resource_type: isImage ? 'image' : 'raw',
+      // Raw resources infer Content-Type from the extension in their own
+      // public_id (no separate format field like image/video have), so
+      // the extension must be preserved or delivery defaults to
+      // application/octet-stream and browsers won't render it inline.
+      public_id: isImage ? undefined : `${Date.now()}-${path.parse(file.originalname).name}${path.extname(file.originalname)}`,
+    };
+  },
 });
 
 const upload = multer({ storage: storage });
